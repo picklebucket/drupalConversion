@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Core.Models
 {
@@ -13,5 +15,8 @@ namespace Core.Models
         public int Count { get; set; }
 
         public string Message { get; set; }
+
+        [JsonIgnore]
+        public Dictionary<Guid, MediaLibraryItem> MediaItems { get; set; }
     }
 }

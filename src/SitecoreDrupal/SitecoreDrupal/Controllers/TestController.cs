@@ -23,9 +23,9 @@ namespace SitecoreDrupal.Controllers
         }
 
         [HttpGet("sync")]
-        public async Task<ActionResult<SyncModelResponse>> Sync(Guid id)
+        public async Task<ActionResult<SyncModelResponse>> Sync(Guid contentRoot, Guid mediaLibraryRoot)
         {
-            return Ok(JsonConvert.SerializeObject(await _sitecoreTreeScannerService.ScanSitecoreTree(id)));
+            return Ok(JsonConvert.SerializeObject(await _sitecoreTreeScannerService.ScanSitecoreTree(contentRoot, mediaLibraryRoot)));
         }
 
         [HttpGet("syncmedia")]

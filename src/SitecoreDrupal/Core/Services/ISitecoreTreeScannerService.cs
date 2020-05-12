@@ -6,7 +6,7 @@ namespace Core.Services
 {
     public interface ISitecoreTreeScannerService
     {
-        Task<SyncModelResponse> ScanSitecoreTree(Guid rootId);
+        Task<SyncModelResponse> ScanSitecoreTree(Guid contentRootId, Guid mediaLibraryRootId);
 
         Task<SitecoreMediaLibraryScanModel> ScanMediaLibrary(Guid rootId);
     }

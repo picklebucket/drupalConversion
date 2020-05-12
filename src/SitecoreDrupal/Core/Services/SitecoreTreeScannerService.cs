@@ -2,6 +2,7 @@
 using Core.Repositories;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -37,13 +38,14 @@ namespace Core.Services
             _localMediaFolder = _configuration["MediaLibrary:LocalMediaFolder"];
         }
 
-        public async Task<SyncModelResponse> ScanSitecoreTree(Guid rootId)
+        public async Task<SyncModelResponse> ScanSitecoreTree(Guid contentRootId, Guid mediaLibraryRootId)
         {
             var result = new SyncModelResponse();
             try
             {
                 await _sitecoreProvider.Login();
-                SitecoreTreeScanModel pages = await SyncSitecorePages(rootId);
+                SitecoreMediaLibraryScanModel mediItems = await ScanMediaLibrary(mediaLibraryRootId);
+                SitecoreTreeScanModel pages = await SyncSitecorePages(contentRootId, mediItems.MediaItems);
                 result.ReadFromSitecoreTime = pages.Time;
                 result.PagesCount = pages.Count;
 
@@ -85,6 +87,7 @@ namespace Core.Services
                 }
 
                 result.Count = mediaLibraryItems.Count;
+                result.MediaItems = mediaLibraryItems;
             }
             catch (Exception ex)
             {
@@ -156,8 +159,8 @@ namespace Core.Services
 
             return mediaFile;
         }
-               
-        private async Task<SitecoreTreeScanModel> SyncSitecorePages(Guid rootId)
+
+        private async Task<SitecoreTreeScanModel> SyncSitecorePages(Guid rootId, Dictionary<Guid, MediaLibraryItem> mediaItems)
         {
             var result = new SitecoreTreeScanModel()
             {
@@ -179,7 +182,7 @@ namespace Core.Services
 
             await TraverseSitecoreTree(rootId, sitecorePages);
 
-            result.Pages = await ConvertSitecorePagesToDbModels(sitecorePages);
+            result.Pages = await ConvertSitecorePagesToDbModels(sitecorePages, mediaItems);
             result.Count = sitecorePages.Count;
             result.End = DateTime.UtcNow;
             result.Time = result.End - result.Start;
@@ -225,9 +228,11 @@ namespace Core.Services
         /// </summary>
         /// <param name="pages"></param>
         /// <returns></returns>
-        private async Task<List<SitecorePageDbModel>> ConvertSitecorePagesToDbModels(Dictionary<Guid, SitecoreItemModel> sitecorePages)
+        private async Task<List<SitecorePageDbModel>> ConvertSitecorePagesToDbModels(
+            Dictionary<Guid, SitecoreItemModel> sitecorePages, Dictionary<Guid, MediaLibraryItem> mediaItems)
         {
             var result = new List<SitecorePageDbModel>();
+            var cacheItems = new Dictionary<Guid, object>();
             foreach (var pagePair in sitecorePages)
             {
                 var dbModel = new SitecorePageDbModel()
@@ -237,10 +242,14 @@ namespace Core.Services
                     TemplateName = pagePair.Value.TemplateName
                 };
 
-                var itemsList = new List<string>();
+                var itemsList = new List<object>();
                 try
                 {
-                    dbModel.Page = await _sitecoreProvider.GetScItemJsonByIdAsync(pagePair.Key);
+                    string pageJson = await _sitecoreProvider.GetScItemJsonByIdAsync(pagePair.Key);
+                    var pageJsonObj = JsonConvert.DeserializeObject<object>(pageJson);
+                    dbModel.Page = JsonConvert.SerializeObject(pageJsonObj);
+                    dbModel.Page = await UpdateNestedIds(dbModel.Page, cacheItems);
+                    dbModel.Page = await UpdateImages(dbModel.Page, mediaItems);
                     List<Guid> datasources = ParseRenderingDatasources(pagePair.Value.Renderings + pagePair.Value.FinalRenderings);
                     foreach (var datasourceId in datasources)
                     {
@@ -249,7 +258,7 @@ namespace Core.Services
                             string item = await _sitecoreProvider.GetScItemJsonByIdAsync(datasourceId);
                             if (!string.IsNullOrEmpty(item))
                             {
-                                itemsList.Add(item);
+                                itemsList.Add(JsonConvert.DeserializeObject<object>(item));
                             }
                         }
                         catch (Exception ex)
@@ -258,7 +267,9 @@ namespace Core.Services
                         }
                     }
 
-                    dbModel.Items = JsonSerializer.Serialize(itemsList);
+                    dbModel.Items = JsonConvert.SerializeObject(itemsList);
+                    dbModel.Items = await UpdateNestedIds(dbModel.Items, cacheItems);
+                    dbModel.Items = await UpdateImages(dbModel.Items, mediaItems);
                 }
                 catch (Exception ex)
                 {
@@ -266,6 +277,118 @@ namespace Core.Services
                 }
 
                 result.Add(dbModel);
+            }
+
+            return result;
+        }
+
+        private async Task<string> UpdateImages(string itemJson, Dictionary<Guid, MediaLibraryItem> mediaFiles)
+        {
+            List<KeyValuePair<string, Guid>> imageMappings = GetMediaItemsGuids(itemJson);
+            foreach (var imageMapping in imageMappings)
+            {
+                MediaLibraryItem mediaFile;
+                if (mediaFiles.TryGetValue(imageMapping.Value, out mediaFile))
+                {
+                    itemJson = itemJson.Replace(imageMapping.Key, mediaFile.LocalPath);
+                }
+            }
+
+            return itemJson;
+        }
+
+        private async Task<string> UpdateNestedIds(string itemJson, Dictionary<Guid, object> cache)
+        {
+            var guidsMappings = GetGuids(itemJson);
+
+            if (guidsMappings.Count == 0)
+                return itemJson;
+
+            foreach (var guidMap in guidsMappings)
+            {
+                var items = new List<object>();
+                foreach (var guid in guidMap.Value)
+                {
+                    if (cache.ContainsKey(guid))
+                    {
+                        items.Add(cache[guid]);
+                    }
+                    else
+                    {
+                        string scItemJson = await _sitecoreProvider.GetScItemJsonByIdAsync(guid);
+                        object scItem = JsonConvert.DeserializeObject<object>(scItemJson);
+                        cache.Add(guid, scItem);
+                        items.Add(scItem);
+                    }
+                }
+
+                if (items.Count == 1)
+                {
+                    itemJson = itemJson.Replace(guidMap.Key, JsonConvert.SerializeObject(items[0]));
+                }
+                else
+                {
+                    itemJson = itemJson.Replace(guidMap.Key, JsonConvert.SerializeObject(items));
+                }
+            }
+
+            return await UpdateNestedIds(itemJson, cache);
+        }
+
+        private List<KeyValuePair<string, Guid>> GetMediaItemsGuids(string itemJson)
+        {
+            //mediaid=.*?({.*?})
+            //("<image.*?\/>")
+            var result = new List<KeyValuePair<string, Guid>>();
+            var imageFieldMatches = Regex.Matches(itemJson, "(<image.*?/>)");
+            foreach (var imageFieldMatche in imageFieldMatches)
+            {
+                string imageFieldValue = ((Match)imageFieldMatche)?.Groups[1]?.Value;
+                if (!string.IsNullOrEmpty(imageFieldValue))
+                {
+                    var imageIdMatche = Regex.Match(imageFieldValue, "mediaid=.*?({.*?})");
+                    string imageIdValue = ((Match)imageIdMatche)?.Groups[1]?.Value;
+                    Guid imageId;
+                    if (!string.IsNullOrEmpty(imageIdValue) && Guid.TryParse(imageIdValue, out imageId))
+                    {
+                        result.Add(new KeyValuePair<string, Guid>(imageFieldValue, imageId));
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        private List<KeyValuePair<string, List<Guid>>> GetGuids(string itemJson)
+        {
+            var result = new List<KeyValuePair<string, List<Guid>>>();
+            var idFieldsMatches = Regex.Matches(itemJson, ":*(\"{.*?}\"),");
+            foreach (var match in idFieldsMatches)
+            {
+                string guidStrMatch = ((Match)match)?.Groups[1]?.Value;
+                if (!string.IsNullOrEmpty(guidStrMatch))
+                {
+                    guidStrMatch = guidStrMatch.Replace("{", "");
+                    guidStrMatch = guidStrMatch.Replace("}", "");
+                    guidStrMatch = guidStrMatch.Replace("}", "");
+                    guidStrMatch = guidStrMatch.Replace("}", "");
+                    guidStrMatch = guidStrMatch.Replace("\"", "");
+                    var guids = guidStrMatch.Split('|');
+                    var ids = new List<Guid>();
+                    foreach (var guid in guids)
+                    {
+                        Guid id;
+                        if (Guid.TryParse(guid, out id))
+                        {
+                            ids.Add(id);
+                        }
+                    }
+
+                    if (ids.Count > 0)
+                    {
+                        result.Add(new KeyValuePair<string, List<Guid>>(((Match)match)?.Groups[1]?.Value, ids));
+                    }
+                }
             }
 
             return result;
