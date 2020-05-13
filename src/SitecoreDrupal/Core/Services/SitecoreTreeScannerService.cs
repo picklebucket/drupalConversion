@@ -172,6 +172,7 @@ namespace Core.Services
             SitecoreItemModel item = await _sitecoreProvider.GetScItemByIdAsync<SitecoreItemModel>(rootId, true);
             if (item != null && item.IsPage)
             {
+                item.ParentID = Guid.Empty;
                 sitecorePages.Add(item.ItemID, item);
             }
             else if (item == null)
