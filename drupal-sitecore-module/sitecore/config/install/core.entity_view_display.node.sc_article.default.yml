@@ -1,0 +1,23 @@
+langcode: en
+status: true
+dependencies:
+    config:
+        - field.field.node.sc_article.body
+        - node.type.sc_article
+    module:
+        - text
+        - user
+id: node.sc_article.default
+targetEntityType: node
+bundle: sc_article
+mode: default
+content:
+    body:
+        label: hidden
+        type: text_default
+        weight: 101
+        settings: {  }
+        third_party_settings: {  }
+    links:
+        weight: 100
+hidden: {  }

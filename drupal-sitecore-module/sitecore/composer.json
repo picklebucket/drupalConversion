@@ -1,0 +1,13 @@
+{
+    "name": "sitecore",
+    "type": "drupal-module",
+    "description": "Sitecore Migration Module",
+    "keywords": [
+    ],
+    "homepage": "https://www.drupal.org/project/sitecore",
+    "minimum-stability": "dev",
+    "support": {
+        "issues": "https://www.drupal.org/project/issues/sitecore",
+        "source": "http://cgit.drupalcode.org/sitecore",
+    },
+}

@@ -1,0 +1,5 @@
+name: 'Sitecore'
+type: module
+description: 'Sitecore Migration Module'
+core: 8.x
+package: 'Custom'

@@ -1,0 +1,9 @@
+sitecore.settings_form:
+  path: '/admin/config/sitecore/settings'
+  defaults:
+    _form: '\Drupal\sitecore\Form\SettingsForm'
+    _title: 'Sitecore Migration Settings Form'
+  requirements:
+    _permission: 'access administration pages'
+  options:
+    _admin_route: TRUE

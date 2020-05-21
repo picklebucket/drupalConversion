@@ -1,0 +1,6 @@
+sitecore.settings_form:
+  title: 'Sitecore Migration Settings'
+  route_name: sitecore.settings_form
+  description: 'Settings page to allow migration of the Sitecore SQLite database'
+  parent: system.admin_config_system
+  weight: 99
