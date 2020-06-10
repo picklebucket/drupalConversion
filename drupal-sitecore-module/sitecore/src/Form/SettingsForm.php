@@ -79,13 +79,26 @@ class SettingsForm extends ConfigFormBase {
                 
                 $tags = array();
                 foreach($page['Taxonomy Terms'] as $term){
-                    $new_term = \Drupal\taxonomy\Entity\Term::create([
-                        'vid' => 'sitecore_tags',
-                        'name' => $term['DisplayName'],
-                    ]);
-                    $new_term->enforceIsNew();
-                    $new_term->save();
-                    $tags[] = array('target_id' => $new_term->id());
+                    
+                    $tids = '';
+                    $query = \Drupal::entityQuery('taxonomy_term');
+                    $query->condition('vid', "sitecore_tags");
+                    $query->condition('name', $term['DisplayName']);
+                    $tids = $query->execute();
+                    
+                    $arr = array();
+                    $arr = array_keys($tids);
+                    
+                    if(empty($tids)){
+                        $new_term = \Drupal\taxonomy\Entity\Term::create([
+                            'vid' => 'sitecore_tags',
+                            'name' => $term['DisplayName'],
+                        ]);
+                        $new_term->save();
+                        $tags[] = array('target_id' => $new_term->id());
+                    } else {
+                        $tags[] =  array('target_id' => $arr[0]);
+                    }
                 }
                 
                 // create the page
