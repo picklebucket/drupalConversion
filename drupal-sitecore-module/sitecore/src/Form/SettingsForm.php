@@ -73,12 +73,27 @@ class SettingsForm extends ConfigFormBase {
 
             foreach($rows as $row){
                 
-                // TODO: process the taxonomy tree, and create vocabulary + terms
+                $new_row_str = '';
+                $new_row_str = str_replace('"Teaser Image":"D:\drupal-media\media library\Feature\noimageavailable.png",', '', $row['Page']);
+                $page = json_decode($new_row_str, TRUE);
+                
+                $tags = array();
+                foreach($page['Taxonomy Terms'] as $term){
+                    $new_term = \Drupal\taxonomy\Entity\Term::create([
+                        'vid' => 'sitecore_tags',
+                        'name' => $term['DisplayName'],
+                    ]);
+                    $new_term->enforceIsNew();
+                    $new_term->save();
+                    $tags[] = array('target_id' => $new_term->id());
+                }
                 
                 // create the page
                 Node::create(array(
                     'type' => 'sc_article',
                     'title' => $row['TemplateName'],
+                    'body' => t('TEST BODY'),
+                    'field_tags' => $tags,
                 ))
                 ->save();
                 

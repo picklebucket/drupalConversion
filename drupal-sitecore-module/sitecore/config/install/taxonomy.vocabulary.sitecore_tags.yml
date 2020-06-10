@@ -1,0 +1,7 @@
+langcode: en
+status: true
+dependencies: {  }
+name: Sitecore Tags
+vid: sitecore_tags
+description: 'Use tags to group articles on similar topics into categories.'
+weight: 0
