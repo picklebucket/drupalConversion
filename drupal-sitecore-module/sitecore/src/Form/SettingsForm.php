@@ -6,6 +6,7 @@ use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\file\Entity\File;
 use Drupal\node\Entity\Node;
+use Drupal\block\Entity\Block;
 
 /**
  * Class SettingsForm.
@@ -71,11 +72,63 @@ class SettingsForm extends ConfigFormBase {
             
             $pdo = NULL;
 
+            /** THIS CREATES A BLOCK CONFIG **/
+//             $block = Block::create(array(
+//                 'id' => 'test_default_config',
+//                 'theme' => 'bartik',
+//                 'status' => TRUE,
+//                 'region' => 'content',
+//                 'plugin' => 'local_tasks_block',
+//                 'settings' => [
+//                     'id' => 'local_tasks_block',
+//                     'label' => 'XXXYYYZZZ',
+//                     'provider' => 'core',
+//                     'label_display' => FALSE,
+//                     'primary' => TRUE,
+//                     'secondary' => TRUE
+//                 ]
+//             ));
+//             $block->save();
+            
+            /*Block::create(array(
+             'id' => 'test_id',
+             'type' => 'basic',
+             'label' => 'Test Label',
+             'region' => 'content',
+             'info' => $items['ItemName'],
+             'plugin' => 'system_main_block',
+             'body' => array(
+             'value' => '<p>TEST BLOCK BODY VALUE</p>',
+             'format' => 'basic_html'
+             ),
+             ))
+             ->save();*/
+            
             foreach($rows as $row){
                 
                 $new_row_str = '';
                 $new_row_str = str_replace('"Teaser Image":"D:\drupal-media\media library\Feature\noimageavailable.png",', '', $row['Page']);
                 $page = json_decode($new_row_str, TRUE);
+                
+                $items = json_decode($row['Items']); 
+                
+                echo '<pre>';
+                var_dump($items);
+                
+                foreach($items as $item){
+                    $blockEntityManager = \Drupal::service('entity.manager')
+                        ->getStorage('block_content');
+                    $block = $blockEntityManager->create(array(
+                        'type' => 'basic'
+                    ));
+                    $block->info = $item->ItemName;
+//                     $block->uuid = 'test_default_config';
+                    $block->body->value = '...text of the block with allowed HTML tags...';
+                    $block->body->format = 'full_html';
+                    $block->save();
+                }
+                
+                continue;
                 
                 $tags = array();
                 foreach($page['Taxonomy Terms'] as $term){
@@ -111,6 +164,8 @@ class SettingsForm extends ConfigFormBase {
                 ->save();
                 
             }
+            
+            die();
             
             $this->messenger()->addStatus($this->t('Congratulations, your Sitecore Database has been imported.'));
             
